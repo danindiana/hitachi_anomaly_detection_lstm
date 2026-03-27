@@ -49,3 +49,9 @@
 ### Target:
 - **Primary:** Anomaly Score (reconstruction error from an Autoencoder).
 - **Secondary:** RUL (Remaining Useful Life) estimation based on degradation slope.
+
+## Final Verification (Mar 26)
+
+- **Model Calibration:** Identified need for longer-term baseline (24h+).
+- **Repository State:** Pushed to danindiana/hitachi_anomaly_detection_lstm.
+- **Status:** System fully operational and handed over to user.

@@ -1,0 +1,52 @@
+digraph G {
+    rankdir=LR;
+    node [shape=box, style=filled, fontname="Arial"];
+    compound=true;
+
+    subgraph cluster_0 {
+        label = "Hardware Layer (Hitachi HUA723020ALA640)";
+        color=lightgrey;
+        disk [label="Physical Platters\n(2TB, 7200 RPM)", fillcolor="#FFD700"];
+        smart [label="SMART Controller\n(Temp, Realloc Sectors)", fillcolor="#FFD700"];
+    }
+
+    subgraph cluster_1 {
+        label = "Linux Kernel Layer";
+        color=lightblue;
+        diskstats [label="/proc/diskstats\n(I/O Throughput, Latency, Util)", fillcolor="#ADD8E6"];
+    }
+
+    subgraph cluster_2 {
+        label = "Python Feature Collector";
+        color=lightgreen;
+        collector [label="collect_disk_features.py\n(1Hz Polling Loop)", fillcolor="#90EE90"];
+        csv_file [label="disk_features.csv\n(Time-Series Dataset)", shape=note, fillcolor="#90EE90"];
+    }
+
+    subgraph cluster_3 {
+        label = "AI Training & Inference";
+        color=lightyellow;
+        trainer [label="train_disk_model.py\n(PyTorch LSTM Autoencoder)", fillcolor="#FFFFE0"];
+        model_pth [label="disk_model.pth\n(Weight Matrix)", shape=cylinder, fillcolor="#FFFFE0"];
+        monitor [label="monitor_disk_health.py\n(Real-time Inference)", fillcolor="#FFFFE0"];
+    }
+
+    subgraph cluster_4 {
+        label = "Output";
+        color=salmon;
+        score [label="Anomaly Score (0-100)\nHealth Status (NORMAL/CRITICAL)", shape=display, fillcolor="#FA8072"];
+    }
+
+    # Connections
+    disk -> diskstats [label="I/O Ops"];
+    smart -> collector [label="Subprocess (smartctl)"];
+    diskstats -> collector [label="File Read"];
+    collector -> csv_file [label="Append Row"];
+    
+    csv_file -> trainer [label="Training Set"];
+    trainer -> model_pth [label="Save Weights"];
+    
+    model_pth -> monitor [label="Load Model"];
+    diskstats -> monitor [label="Live Telemetry"];
+    monitor -> score [label="Loss Calculation"];
+}
