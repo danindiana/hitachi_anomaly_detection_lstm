@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="assets/icons/4phgte/icon_512.png" width="200" alt="Hitachi Anomaly Detection Logo">
+</p>
+
+
 # Disk Intelligence: Hitachi Anomaly Detection (LSTM)
 
 An AI-driven disk health monitoring system designed for high-resolution performance tracking and failure prediction. 
