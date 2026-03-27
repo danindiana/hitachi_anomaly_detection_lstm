@@ -22,19 +22,22 @@ FEATURES = ["read_kb_s", "write_kb_s", "avg_latency_ms", "io_utilization_pct", "
 
 def get_disk_stats():
     """Simplified stats fetch for the monitor."""
-    with open("/proc/diskstats", "r") as f:
-        for line in f:
-            parts = line.split()
-            if parts[2] == DISK:
-                return {
-                    "reads": int(parts[3]),
-                    "writes": int(parts[7]),
-                    "read_bytes": int(parts[5]) * 512,
-                    "write_bytes": int(parts[9]) * 512,
-                    "time_reading": int(parts[6]),
-                    "time_writing": int(parts[10]),
-                    "io_time": int(parts[12])
-                }
+    try:
+        with open("/proc/diskstats", "r") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) > 2 and parts[2] == DISK:
+                    return {
+                        "reads": int(parts[3]),
+                        "writes": int(parts[7]),
+                        "read_bytes": int(parts[5]) * 512,
+                        "write_bytes": int(parts[9]) * 512,
+                        "time_reading": int(parts[6]),
+                        "time_writing": int(parts[10]),
+                        "io_time": int(parts[12])
+                    }
+    except Exception as e:
+        print(f"Error reading diskstats: {e}")
     return None
 
 def get_temp():
@@ -45,7 +48,7 @@ def get_temp():
             if "Temperature_Celsius" in line:
                 return int(line.split()[9].split('(')[0])
     except:
-        return 39 # Fallback to last known
+        pass
     return 39
 
 def run_monitor():
@@ -67,12 +70,15 @@ def run_monitor():
     print(f"--- Real-time Health Monitor for {DISK} ---")
     print("Anomaly Score: 0 (Normal) -> Higher (Potential Issue)")
     print("-" * 50)
+    print("Initializing data window (10 seconds)...")
 
     try:
         while True:
             time.sleep(1.0)
             curr_stats = get_disk_stats()
-            if not curr_stats or not last_stats: continue
+            if not curr_stats or not last_stats: 
+                print("DEBUG: Failed to get stats")
+                continue
 
             # Calculate metrics
             read_kb = (curr_stats["read_bytes"] - last_stats["read_bytes"]) / 1024
@@ -96,6 +102,8 @@ def run_monitor():
             # Scale
             scaled_vec = (feat_vec - scaler_mean) / scaler_scale
             window.append(scaled_vec)
+            
+            # print(f"DEBUG: Window size: {len(window)}")
 
             # Inference
             if len(window) == WINDOW_SIZE:
@@ -111,7 +119,7 @@ def run_monitor():
                 if anomaly_score > 50: status = "WARNING"
                 if anomaly_score > 80: status = "CRITICAL"
 
-                print(f"[{datetime.now().strftime('%H:%M:%S')}] Score: {anomaly_score:5.2f} | Status: {status:8} | Lat: {avg_lat:5.2f}ms | Util: {util:4.1f}%", end='\r')
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Score: {anomaly_score:5.2f} | Status: {status:8} | Lat: {avg_lat:5.2f}ms | Util: {util:4.1f}%")
 
             last_stats = curr_stats
             

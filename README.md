@@ -17,7 +17,11 @@ This repository was autonomously generated to analyze a **Hitachi HUA723020ALA64
 - **Power-on Time:** ~4.8 years (1,755 days)
 - **Current Wear:** 541 Reallocated Sectors (Stable)
 
-## Getting Started
+## Initial Calibration Warning
+
+The current model was trained on a short burst of high-intensity I/O (126 MB/s) and a few minutes of idle time. Because of this limited dataset, the **Anomaly Score** may report "CRITICAL" for normal idle behavior. 
+
+**Recommendation:** For accurate health monitoring, run the `collect_disk_features.py` script for at least **24 hours** under normal system usage before running `train_disk_model.py`. This allows the LSTM to learn the full performance profile of your specific drive.
 
 1. **Install Dependencies:**
    ```bash
