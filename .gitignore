@@ -1,0 +1,14 @@
+# Data and Models
+*.csv
+*.pth
+*.npy
+feature_names.txt
+thresholds.npy
+
+# Environment and Cache
+venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# Logs
+*.log

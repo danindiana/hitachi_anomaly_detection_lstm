@@ -57,13 +57,20 @@ jeb ALL=(root) NOPASSWD: /usr/sbin/smartctl -A /dev/sdb
    python3 train_disk_model.py
    ```
 
-### 4. Install Systemd Service
-To run as a persistent background daemon:
-1. Update `disk-monitor.service` with your absolute paths (User, WorkingDirectory, ExecStart).
+### 4. Install Systemd Services
+To run as persistent background daemons:
+1. Update `disk-monitor.service` and `disk-collector.service` (found at the repo root) with your absolute paths (User, WorkingDirectory, ExecStart).
 2. Install and start:
 ```bash
+# Copy services from the repo root to systemd
 sudo cp disk-monitor.service /etc/systemd/system/
+sudo cp disk-collector.service /etc/systemd/system/
 sudo systemctl daemon-reload
+
+# Start the collector for baseline gathering
+sudo systemctl enable --now disk-collector
+
+# Once trained, start the monitor
 sudo systemctl enable --now disk-monitor
 ```
 

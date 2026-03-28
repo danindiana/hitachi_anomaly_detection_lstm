@@ -88,86 +88,95 @@ def main():
     if file_exists:
         trim_csv(DATA_FILE, MAX_ROWS)
     
-    with open(DATA_FILE, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=headers)
-        if not file_exists:
-            writer.writeheader()
+    # We use 'a' for append, but we'll need to handle file opening carefully 
+    # when trimming to avoid race conditions with the file handle.
+    f = open(DATA_FILE, "a", newline="")
+    writer = csv.DictWriter(f, fieldnames=headers)
+    if not file_exists:
+        writer.writeheader()
             
-        last_stats = get_disk_stats()
+    last_stats = get_disk_stats()
+    last_smart = get_smart_metrics()
+    while last_smart is None:
+        print("Waiting for initial SMART data...")
+        time.sleep(2)
         last_smart = get_smart_metrics()
-        while last_smart is None:
-            print("Waiting for initial SMART data...")
-            time.sleep(2)
-            last_smart = get_smart_metrics()
             
-        last_smart_time = time.time()
-        last_poll_time = time.time()
-        last_trim_time = time.time()
+    last_smart_time = time.time()
+    last_poll_time = time.time()
+    last_trim_time = time.time()
         
-        try:
-            while True:
-                time.sleep(max(0, POLL_INTERVAL - (time.time() - last_poll_time)))
+    try:
+        while True:
+            time.sleep(max(0, POLL_INTERVAL - (time.time() - last_poll_time)))
+            
+            curr_time = time.time()
+            dt = curr_time - last_poll_time
+            last_poll_time = curr_time
+            
+            curr_stats = get_disk_stats()
+            if not curr_stats or not last_stats:
+                continue
+            
+            reads_diff = curr_stats["reads"] - last_stats["reads"]
+            writes_diff = curr_stats["writes"] - last_stats["writes"]
+            sectors_read = curr_stats["sectors_read"] - last_stats["sectors_read"]
+            sectors_written = curr_stats["sectors_written"] - last_stats["sectors_written"]
+            time_io = (curr_stats["io_time"] - last_stats["io_time"])
+            
+            read_kb_s = (sectors_read * 512) / 1024 / dt
+            write_kb_s = (sectors_written * 512) / 1024 / dt
+            
+            total_ops = reads_diff + writes_diff
+            if total_ops > 0:
+                total_time = (curr_stats["time_reading"] - last_stats["time_reading"]) + \
+                             (curr_stats["time_writing"] - last_stats["time_writing"])
+                avg_latency = total_time / total_ops
+            else:
+                avg_latency = 0
                 
-                curr_time = time.time()
-                dt = curr_time - last_poll_time
-                last_poll_time = curr_time
-                
-                curr_stats = get_disk_stats()
-                if not curr_stats or not last_stats:
-                    continue
-                
-                reads_diff = curr_stats["reads"] - last_stats["reads"]
-                writes_diff = curr_stats["writes"] - last_stats["writes"]
-                sectors_read = curr_stats["sectors_read"] - last_stats["sectors_read"]
-                sectors_written = curr_stats["sectors_written"] - last_stats["sectors_written"]
-                time_io = (curr_stats["io_time"] - last_stats["io_time"])
-                
-                read_kb_s = (sectors_read * 512) / 1024 / dt
-                write_kb_s = (sectors_written * 512) / 1024 / dt
-                
-                total_ops = reads_diff + writes_diff
-                if total_ops > 0:
-                    total_time = (curr_stats["time_reading"] - last_stats["time_reading"]) + \
-                                 (curr_stats["time_writing"] - last_stats["time_writing"])
-                    avg_latency = total_time / total_ops
-                else:
-                    avg_latency = 0
-                    
-                utilization = (time_io / (dt * 1000)) * 100
-                
-                if curr_time - last_smart_time > SMART_INTERVAL:
-                    curr_smart = get_smart_metrics()
-                    if curr_smart:
-                        last_smart = curr_smart
-                        last_smart_time = curr_time
-                
-                # Periodic trim (every 1 hour)
-                if curr_time - last_trim_time > 3600:
-                    f.flush()
-                    trim_csv(DATA_FILE, MAX_ROWS)
-                    last_trim_time = curr_time
-                
-                row = {
-                    "timestamp": datetime.now().isoformat(),
-                    "unix_time": curr_time,
-                    "read_kb_s": round(read_kb_s, 2),
-                    "write_kb_s": round(write_kb_s, 2),
-                    "avg_latency_ms": round(avg_latency, 2),
-                    "io_utilization_pct": round(utilization, 2),
-                    "reallocated_sectors": last_smart["reallocated_sectors"],
-                    "pending_sectors": last_smart["pending_sectors"],
-                    "offline_uncorrectable": last_smart.get("offline_uncorrectable", 0),
-                    "temperature": last_smart["temperature"],
-                    "power_on_hours": last_smart["power_on_hours"]
-                }
-                writer.writerow(row)
-                f.flush()
-                
-                last_stats = curr_stats
-                print(f"[{row['timestamp']}] Lat: {row['avg_latency_ms']:5.2f}ms | Util: {row['io_utilization_pct']:5.2f}% | Temp: {last_smart['temperature']}C", end='\r')
-                
-        except KeyboardInterrupt:
-            print("\nCollection stopped.")
+            utilization = (time_io / (dt * 1000)) * 100
+            
+            if curr_time - last_smart_time > SMART_INTERVAL:
+                curr_smart = get_smart_metrics()
+                if curr_smart:
+                    last_smart = curr_smart
+                    last_smart_time = curr_time
+            
+            # Periodic trim (every 1 hour)
+            if curr_time - last_trim_time > 3600:
+                # CRITICAL: Close file handle before trimming to avoid race conditions
+                f.close()
+                trim_csv(DATA_FILE, MAX_ROWS)
+                # Reopen file for appending
+                f = open(DATA_FILE, "a", newline="")
+                writer = csv.DictWriter(f, fieldnames=headers)
+                last_trim_time = curr_time
+            
+            row = {
+                "timestamp": datetime.now().isoformat(),
+                "unix_time": curr_time,
+                "read_kb_s": round(read_kb_s, 2),
+                "write_kb_s": round(write_kb_s, 2),
+                "avg_latency_ms": round(avg_latency, 2),
+                "io_utilization_pct": round(utilization, 2),
+                "reallocated_sectors": last_smart["reallocated_sectors"],
+                "pending_sectors": last_smart["pending_sectors"],
+                "offline_uncorrectable": last_smart.get("offline_uncorrectable", 0),
+                "temperature": last_smart["temperature"],
+                "power_on_hours": last_smart["power_on_hours"]
+            }
+            writer.writerow(row)
+            f.flush()
+            
+            last_stats = curr_stats
+            print(f"[{row['timestamp']}] Lat: {row['avg_latency_ms']:5.2f}ms | Util: {row['io_utilization_pct']:5.2f}% | Temp: {last_smart['temperature']}C", end='\r')
+            
+    except KeyboardInterrupt:
+        print("\nCollection stopped.")
+    finally:
+        if 'f' in locals() and not f.closed:
+            f.close()
 
 if __name__ == "__main__":
     main()
