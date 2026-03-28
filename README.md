@@ -11,9 +11,16 @@ This repository was autonomously generated to analyze a **Hitachi HUA723020ALA64
 
 ## Features
 
-- **High-Frequency Telemetry (`collect_disk_features.py`)**: Polls `/proc/diskstats` (1Hz) and `smartctl` (60s) to build a multi-variate time-series of throughput, latency, and hardware health.
-- **Deep Learning Core (`train_disk_model.py`)**: A PyTorch-based **LSTM Autoencoder** that learns the "normal" performance signature of a specific drive.
-- **Real-Time Monitor (`monitor_disk_health.py`)**: Calculates an **Anomaly Score (0-100)** in real-time by measuring the reconstruction error of the neural network.
+- **High-Frequency Telemetry (`collect_disk_features.py`)**: Polls `/proc/diskstats` (1Hz) and `smartctl` (60s) for throughput, latency, and hardware health.
+- **Production-Ready Monitor (`monitor_disk_health.py`)**: 
+    - Real-time **Anomaly Score** calculation via LSTM Autoencoder reconstruction error.
+    - **Edge-Triggered Syslog Alerting**: Immediate notifications for new reallocated or pending sectors.
+    - **Calibrated Thresholds**: Uses 95th/99th percentile errors from training for WARN/CRITICAL states.
+    - **Secure Inference**: Uses `weights_only=True` for model loading and feature synchronization via `feature_names.txt`.
+- **Automated Data Management**: 
+    - `MAX_ROWS` (100k) cap on CSV features to prevent unbounded disk growth.
+    - Chronological 80/20 data splitting for time-series integrity during training.
+- **Deep Learning Core (`train_disk_model.py`)**: PyTorch LSTM Autoencoder with Early Stopping and validation floor.
 
 ## Hardware Targets
 
@@ -22,52 +29,50 @@ This repository was autonomously generated to analyze a **Hitachi HUA723020ALA64
 - **Power-on Time:** ~4.8 years (1,755 days)
 - **Current Wear:** 541 Reallocated Sectors (Stable)
 
-## Initial Calibration Warning
+## Production Deployment
 
-The current model was trained on a short burst of high-intensity I/O (126 MB/s) and a few minutes of idle time. Because of this limited dataset, the **Anomaly Score** may report "CRITICAL" for normal idle behavior. 
+### 1. Setup Environment
+It is recommended to use a dedicated virtual environment for the monitor.
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install torch pandas numpy scikit-learn
+```
 
-**Recommendation:** For accurate health monitoring, run the `collect_disk_features.py` script for at least **24 hours** under normal system usage before running `train_disk_model.py`. This allows the LSTM to learn the full performance profile of your specific drive.
+### 2. Configure Sudoers
+The monitor requires `smartctl` access without a password to run as a background service. 
+Run `sudo visudo -f /etc/sudoers.d/disk-monitor` and add:
+```
+# Replace 'jeb' with your username
+jeb ALL=(root) NOPASSWD: /usr/sbin/smartctl -A /dev/sdb
+```
 
-1. **Install Dependencies:**
-   ```bash
-   pip install torch pandas numpy scikit-learn
-   ```
-
-2. **Collect Data:**
-   Run the collector for a few minutes while performing normal disk operations.
+### 3. Collection & Training
+1. **Collect Baseline Data**: Run for ~24 hours under normal usage.
    ```bash
    python3 collect_disk_features.py
    ```
-
-3. **Train the Neural Network:**
+2. **Train the Model**:
    ```bash
    python3 train_disk_model.py
    ```
 
-4. **Monitor Health Score:**
-   ```bash
-   python3 monitor_disk_health.py
-   ```
-
-## System-Wide I/O Guard (Multi-Variate LSTM)
-
-Beyond single-disk monitoring, this system now includes a **System-Wide I/O Guard** to detect cross-disk latency correlations and kernel memory pressure—the leading indicators of the March 11 system freeze.
-
-- **Unified Telemetry (`collect_system_wide.py`)**: Monitors 10 block devices (including RAID0) and Kernel Memory (`Slab`, `Percpu`).
-- **Multi-Variate Model (`train_system_model.py`)**: Analyzes 42 features simultaneously to understand system-wide I/O relationships.
-- **Health Dashboard (`monitor_system_health.py`)**: Real-time "System Health" scoring for the entire I/O subsystem.
-
-### Usage
-
+### 4. Install Systemd Service
+To run as a persistent background daemon:
+1. Update `disk-monitor.service` with your absolute paths (User, WorkingDirectory, ExecStart).
+2. Install and start:
 ```bash
-# 1. Collect system-wide baseline
-python3 collect_system_wide.py
+sudo cp disk-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now disk-monitor
+```
 
-# 2. Train the multi-variate model
-python3 train_system_model.py
-
-# 3. Start the I/O Guard
-python3 monitor_system_health.py
+### 5. Monitoring Logs
+View real-time status and alerts:
+```bash
+journalctl -u disk-monitor -f
+# Or filter for syslog alerts
+journalctl -t python3 -f
 ```
 
 ---

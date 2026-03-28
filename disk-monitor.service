@@ -1,0 +1,17 @@
+[Unit]
+Description=Disk Health Anomaly Detection Monitor
+After=local-fs.target
+
+[Service]
+Type=simple
+User=jeb
+WorkingDirectory=/home/jeb/programs/gemini_cli_workspace/disk-monitor
+# Use the self-contained virtualenv
+ExecStart=/home/jeb/programs/gemini_cli_workspace/disk-monitor/venv/bin/python3 monitor_disk_health.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
