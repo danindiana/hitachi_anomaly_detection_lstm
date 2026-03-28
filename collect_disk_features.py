@@ -175,8 +175,10 @@ def main():
     except KeyboardInterrupt:
         print("\nCollection stopped.")
     finally:
-        if 'f' in locals() and not f.closed:
+        try:
             f.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
